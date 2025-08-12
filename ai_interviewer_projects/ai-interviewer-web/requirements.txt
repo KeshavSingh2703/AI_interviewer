@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+reportlab
+ollama
+pydantic
+bcrypt
+python-jose
+PyPDF2

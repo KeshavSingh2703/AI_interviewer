@@ -1,0 +1,64 @@
+# Node (frontend + backend)
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.cache/
+**/dist/
+**/build/
+.tmp/
+.temp/
+**/.parcel-cache/
+**/.vite/
+**/.next/
+
+# Environment/secrets
+**/.env
+**/.env.*.local
+**/.env.local
+ai_interviewer_projects/ai-interviewer-web/backend/config.env
+
+# Logs
+logs/
+*.log
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+**/.venv/
+**/venv/
+**/env/
+.python-version
+.mypy_cache/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Coverage
+coverage/
+.coverage*
+coverage.xml
+htmlcov/
+
+# Uploads/media (if stored locally)
+ai_interviewer_projects/ai-interviewer-web/backend/uploads/
+**/recordings/
+**/output/
+
+# Editors/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Misc
+*.swp
+*.swo
+
+
+

@@ -1,0 +1,28 @@
+{
+  "name": "ai-interviewer-web",
+  "version": "1.0.0",
+  "description": "AI Interviewer Web Application with Express.js backend and React frontend",
+  "main": "start.js",
+  "scripts": {
+    "start": "node start.js",
+    "dev": "node start.js",
+    "backend": "cd backend && npm start",
+    "frontend": "cd frontend && npm start",
+    "install-all": "cd backend && npm install && cd ../frontend && npm install",
+    "build": "cd frontend && npm run build"
+  },
+  "keywords": [
+    "ai",
+    "interviewer",
+    "express",
+    "mongodb",
+    "react",
+    "interview"
+  ],
+  "author": "AI Interviewer Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  }
+}

@@ -14,13 +14,13 @@ class AIInterviewAgent:
         self.current_role = None
         self.resume_data = None
         self.user_name = None
-        self.agent_name = "Gwen"
+        self.agent_name = "Rick"
     
     def greet_user(self):
-        """Gwen's personalized greeting and introduction for a real interview experience."""
-        speak("Hello! I'm Gwen, and I will be conducting your interview today. I'm excited to meet you and learn more about your background and experience!")
+        """Rick's personalized greeting and introduction for a real interview experience."""
+        speak("Hello! I'm Rick, and I will be conducting your interview today. I'm excited to meet you and learn more about your background and experience!")
         
-        # Get user's name - ensure Gwen continues even if voice recognition fails
+        # Get user's name - ensure Rick continues even if voice recognition fails
         speak("What is your name?")
         
         # Use a more robust approach to get the name
@@ -51,10 +51,10 @@ class AIInterviewAgent:
         except Exception as e:
             speak("I understand! Let's make this interview experience comfortable and professional for you.")
         
-        # Ensure Gwen continues to the next step - this is the key fix
+        # Ensure Rick continues to the next step - this is the key fix
         speak("Now, let's proceed with your interview preparation.")
         
-        # Additional confirmation that Gwen is continuing
+        # Additional confirmation that Rick is continuing
         speak("I'm ready to help you with your interview today.")
         
         # Now ask about the role - this is the new addition
@@ -203,12 +203,12 @@ class AIInterviewAgent:
         else:
             speak("No problem at all! We'll proceed with the interview without resume review.")
         
-        # Ensure Gwen continues talking after resume check
+        # Ensure Rick continues talking after resume check
         speak("Now, let's proceed with the interview.")
     
     def run_interview(self):
-        """Run the complete voice-based interview process with Gwen's personality."""
-        # Gwen's introduction and greeting (this now includes role selection)
+        """Run the complete voice-based interview process with Rick's personality."""
+        # Rick's introduction and greeting (this now includes role selection)
         self.greet_user()
         
         # Ensure conversation continues - this is the key fix
@@ -313,7 +313,7 @@ class AIInterviewAgent:
             pass
 
 def main():
-    """Main function to run the AI interview agent with Gwen."""
+    """Main function to run the AI interview agent with Rick."""
     agent = AIInterviewAgent()
     agent.run_interview()
 

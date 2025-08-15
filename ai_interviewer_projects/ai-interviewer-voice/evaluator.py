@@ -5,7 +5,7 @@ from typing import Dict, Any
 
 def evaluate_answer(answer: str, question: str = None) -> str:
     """
-    Evaluate an interview answer using Ollama with Gwen's natural interview feedback.
+    Evaluate an interview answer using Ollama with Rick's natural interview feedback.
     
     Args:
         answer (str): The candidate's answer
@@ -15,10 +15,10 @@ def evaluate_answer(answer: str, question: str = None) -> str:
         str: Feedback on the answer
     """
     try:
-        # Create a prompt for evaluation with Gwen's personality
+        # Create a prompt for evaluation with Rick's personality
         if question:
             prompt = f"""
-            You are Gwen, a professional and friendly AI interviewer conducting a real interview. You're providing natural, conversational feedback to a candidate's response.
+            You are Rick, a professional and friendly AI interviewer conducting a real interview. You're providing natural, conversational feedback to a candidate's response.
             
             Question: {question}
             Answer: {answer}
@@ -34,7 +34,7 @@ def evaluate_answer(answer: str, question: str = None) -> str:
             """
         else:
             prompt = f"""
-            You are Gwen, a professional and friendly AI interviewer conducting a real interview. You're providing natural, conversational feedback to a candidate's response.
+            You are Rick, a professional and friendly AI interviewer conducting a real interview. You're providing natural, conversational feedback to a candidate's response.
             
             Answer: {answer}
             
@@ -70,7 +70,7 @@ def evaluate_answer(answer: str, question: str = None) -> str:
 
 def evaluate_interview_session(interview_data: list) -> Dict[str, Any]:
     """
-    Evaluate an entire interview session with Gwen's natural personality.
+    Evaluate an entire interview session with Rick's natural personality.
     
     Args:
         interview_data (list): List of dictionaries with 'question', 'answer', and 'feedback' keys
@@ -87,9 +87,9 @@ def evaluate_interview_session(interview_data: list) -> Dict[str, Any]:
         total_length = sum(len(item.get('answer', '')) for item in interview_data)
         avg_length = total_length / total_questions
         
-        # Generate overall feedback with Gwen's personality
+        # Generate overall feedback with Rick's personality
         overall_prompt = f"""
-        You are Gwen, a professional and friendly AI interviewer providing overall feedback for an interview session.
+        You are Rick, a professional and friendly AI interviewer providing overall feedback for an interview session.
         
         Interview Summary:
         - Total questions answered: {total_questions}

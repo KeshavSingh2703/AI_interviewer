@@ -28,7 +28,7 @@ import time
 #         else:
 #             engine.setProperty('voice', voices[0].id)
     
-#     # Set speech rate and volume for Gwen - more natural conversation pace
+#     # Set speech rate and volume for Rick - more natural conversation pace
 #     engine.setProperty('rate', 135)  # Slightly slower for clearer, more natural speech
 #     engine.setProperty('volume', 0.9)  # Volume level
     
@@ -42,7 +42,7 @@ def get_enginge():
     return engine
 
 def speak(text):
-    """Convert text to speech with Gwen's voice - with error logging."""
+    """Convert text to speech with Rick's voice - with error logging."""
     engine = get_enginge()
     if engine:
         try:
@@ -100,7 +100,7 @@ def listen(timeout=15, phrase_time_limit=20):
 
 def test_audio():
     """Test function to verify audio functionality."""
-    speak("Hello! I'm Gwen, your AI interview assistant. This is a test of my voice.")
+    speak("Hello! I'm Rick, your AI interview assistant. This is a test of my voice.")
     
     # Test speech-to-text
     speak("Now I'll test the speech recognition. Please say something when I finish speaking.")

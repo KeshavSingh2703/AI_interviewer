@@ -49,7 +49,7 @@ const Login = () => {
             Welcome back to AI Interviewer
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Sign in to continue with Gwen, your AI interviewer
+            Sign in to continue with Rick, your AI interviewer
           </p>
         </div>
 

@@ -50,6 +50,8 @@ export const interviewAPI = {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
+  downloadReport: (sessionId) =>
+    api.get(`/api/interview/report/${sessionId}`, { responseType: "blob" }),
 };
 
 export default api;

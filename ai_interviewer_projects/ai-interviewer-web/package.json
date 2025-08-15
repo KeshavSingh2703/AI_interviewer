@@ -9,7 +9,9 @@
     "backend": "cd backend && npm start",
     "frontend": "cd frontend && npm start",
     "install-all": "cd backend && npm install && cd ../frontend && npm install",
-    "build": "cd frontend && npm run build"
+    "build": "cd frontend && npm run build",
+    "start:with-voice": "node start.js --voice",
+    "voice": "node start.js --voice-only"
   },
   "keywords": [
     "ai",

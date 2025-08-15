@@ -32,6 +32,48 @@ const InterviewSession = () => {
   const noResponseTimerRef = useRef(null);
   const finalWaitTimerRef = useRef(null);
   const endedRef = useRef(false);
+  const hasGreetedRef = useRef(false);
+  const preGreetedRef = useRef(false);
+
+  // Helpers for realistic conversation
+  const isUnsureAnswer = (text) => {
+    if (!text || typeof text !== "string") return false;
+    const patterns = [
+      /\bi\s*don'?t\s*know\b/i,
+      /\bdo\s*not\s*know\b/i,
+      /\bnot\s*sure\b/i,
+      /\bno\s*idea\b/i,
+      /\bi'?m\s*not\s*sure\b/i,
+      /\bunsure\b/i,
+      /\bidk\b/i,
+      /\bpass\b/i,
+    ];
+    return patterns.some((re) => re.test(text));
+  };
+
+  const shouldAskFollowUp = (text) => {
+    if (!text) return false;
+    if (isUnsureAnswer(text)) return false;
+    const wordCount = text.trim().split(/\s+/).length;
+    return wordCount < 12; // short answers trigger a follow-up
+  };
+
+  const getFollowUpQuestion = (role) => {
+    const prompts = [
+      "Could you walk me through a specific example?",
+      "What was the impact or outcome of your approach?",
+      "Which tools or techniques did you use?",
+      "What challenges did you face and how did you handle them?",
+      "How did you measure success in that situation?",
+    ];
+    // Optionally tailor first prompt by role category
+    return prompts[0];
+  };
+
+  const speakAsync = (text) =>
+    new Promise((resolve) => {
+      speak(text, { onEnd: resolve });
+    });
 
   useEffect(() => {
     fetchSession();
@@ -40,23 +82,45 @@ const InterviewSession = () => {
       typeof window !== "undefined" &&
       (window.SpeechRecognition || window.webkitSpeechRecognition);
     setVoiceSupported(Boolean(hasTTS && SpeechRecognition));
+    try {
+      preGreetedRef.current =
+        sessionStorage.getItem("rick_pre_greeted") === "1";
+      if (preGreetedRef.current) sessionStorage.removeItem("rick_pre_greeted");
+    } catch (_) {}
   }, [sessionId]);
 
   useEffect(() => {
     if (
-      voiceSupported &&
-      session &&
-      session.status !== "completed" &&
-      session.questions &&
-      session.questions[currentQuestionIndex]
+      !voiceSupported ||
+      !session ||
+      session.status === "completed" ||
+      !session.questions ||
+      !session.questions[currentQuestionIndex]
     ) {
-      const q = session.questions[currentQuestionIndex].question;
-      speak(q, {
-        onEnd: () => {
-          startListeningWithTimeouts();
-        },
-      });
+      return;
     }
+
+    // If first question and not greeted yet, greet and ask immediately
+    if (currentQuestionIndex === 0 && !hasGreetedRef.current) {
+      const firstQ = session.questions[0].question;
+      const name = session.user_name || session.name || "there";
+      hasGreetedRef.current = true;
+      const greet = preGreetedRef.current
+        ? "Let's begin."
+        : `Hello ${name}. Hope you're doing good. Let's start your interview. First question: ${firstQ}`;
+      speak(greet, {
+        onEnd: () => startListeningWithTimeouts(),
+      });
+      return;
+    }
+
+    const q = session.questions[currentQuestionIndex].question;
+    speak(q, {
+      onEnd: () => {
+        startListeningWithTimeouts();
+      },
+    });
+
     return () => {
       try {
         recognitionRef.current?.abort?.();
@@ -99,10 +163,6 @@ const InterviewSession = () => {
       if (response.data.session.status === "completed") {
         console.log("Session is completed, showing results");
         setShowResults(true);
-      } else if (voiceSupported) {
-        // Read the first question
-        const firstQ = response?.data?.session?.questions?.[0]?.question;
-        if (firstQ) speak(firstQ);
       }
     } catch (error) {
       console.error("Error fetching session:", error);
@@ -122,11 +182,49 @@ const InterviewSession = () => {
     setSubmitting(true);
 
     try {
+      // Optionally ask one follow-up before submitting
+      let combinedAnswer = currentAnswer.trim();
+      if (voiceSupported && shouldAskFollowUp(combinedAnswer)) {
+        const followUp = getFollowUpQuestion(session.role);
+        await speakAsync(followUp);
+        // Listen for the follow-up reply
+        const followUpText = await new Promise((resolve) => {
+          const SpeechRecognition =
+            window.SpeechRecognition || window.webkitSpeechRecognition;
+          if (!SpeechRecognition) return resolve("");
+          const recognition = new SpeechRecognition();
+          recognition.lang = "en-US";
+          recognition.interimResults = true;
+          recognition.maxAlternatives = 1;
+          let finalTranscript = "";
+          setListening(true);
+          recognition.start();
+          recognition.onresult = (event) => {
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+              const transcript = event.results[i][0].transcript;
+              if (event.results[i].isFinal) {
+                finalTranscript += transcript + " ";
+              }
+            }
+          };
+          recognition.onerror = () => {
+            setListening(false);
+          };
+          recognition.onend = () => {
+            setListening(false);
+            resolve(finalTranscript.trim());
+          };
+        });
+        if (followUpText) {
+          combinedAnswer = `${combinedAnswer}\n\nFollow-up: ${followUpText}`;
+        }
+      }
+
       const response = await interviewAPI.submitAnswer(session.id, {
         question_id:
           session.questions?.[currentQuestionIndex]?.id ||
           currentQuestionIndex + 1,
-        answer: currentAnswer,
+        answer: combinedAnswer,
       });
 
       // Update session with new answer
@@ -147,16 +245,31 @@ const InterviewSession = () => {
 
       setCurrentAnswer("");
 
-      // Move to next question or complete interview
-      if (currentQuestionIndex + 1 < session.questions.length) {
-        setCurrentQuestionIndex(currentQuestionIndex + 1);
-        toast.success("Answer submitted! Moving to next question.");
-        if (voiceSupported) {
+      // Move to next question or complete — no per-question feedback spoken
+      const isLast = currentQuestionIndex + 1 >= session.questions.length;
+      if (voiceSupported) {
+        if (!isLast) {
           const nextQ = session.questions[currentQuestionIndex + 1]?.question;
-          if (nextQ) speak(nextQ);
+          setCurrentQuestionIndex((idx) => idx + 1);
+          if (nextQ) {
+            await speakAsync("Let's proceed to the next question.");
+            await speakAsync(nextQ);
+            startListeningWithTimeouts();
+          }
+        } else {
+          await speakAsync(
+            "That was the last question. Wrapping up your results now."
+          );
+          await completeInterview();
         }
       } else {
-        await completeInterview();
+        // Non-voice fallback
+        if (!isLast) {
+          setCurrentQuestionIndex(currentQuestionIndex + 1);
+          toast.success("Answer submitted! Moving to next question.");
+        } else {
+          await completeInterview();
+        }
       }
     } catch (error) {
       console.error("Error submitting answer:", error);
@@ -193,23 +306,21 @@ const InterviewSession = () => {
       setListening(true);
       recognition.start();
       recognition.onresult = (event) => {
-        let interim = "";
+        // Accumulate only; do not require manual submit
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
             finalTranscript += transcript + " ";
-          } else {
-            interim += transcript;
           }
         }
-        setCurrentAnswer((finalTranscript + interim).trim());
+        setCurrentAnswer(finalTranscript.trim());
       };
       recognition.onerror = () => {
         setListening(false);
       };
       recognition.onend = async () => {
         setListening(false);
-        // Auto submit if have text
+        // Auto submit if we captured speech
         if (currentAnswer.trim() && !endedRef.current) {
           try {
             await handleSubmitAnswer();
@@ -241,6 +352,16 @@ const InterviewSession = () => {
 
       setShowResults(true);
       toast.success("Interview completed! Check your results below.");
+
+      // Speak overall experience summary
+      try {
+        const overall = response?.data?.overall_evaluation;
+        const overallText = overall?.overall_feedback || overall?.feedback;
+        if (voiceSupported && overallText) {
+          await speakAsync("Here's my overall feedback on your interview.");
+          await speakAsync(overallText);
+        }
+      } catch (_) {}
     } catch (error) {
       console.error("Error completing interview:", error);
       toast.error("Failed to complete interview");
@@ -329,7 +450,7 @@ const InterviewSession = () => {
 
                 <div>
                   <h4 className="font-medium text-gray-900 mb-2">
-                    Gwen's Feedback:
+                    Rick's Feedback:
                   </h4>
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <p className="text-blue-800">
@@ -345,6 +466,31 @@ const InterviewSession = () => {
 
           {/* Action Buttons */}
           <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
+            <button
+              onClick={async () => {
+                try {
+                  const res = await interviewAPI.downloadReport(session.id);
+                  const blob = new Blob([res.data], {
+                    type: "application/pdf",
+                  });
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `interview_report_${session.id}.pdf`;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                  window.URL.revokeObjectURL(url);
+                } catch (err) {
+                  console.error("Download report failed:", err);
+                  toast.error("Failed to download report");
+                }
+              }}
+              className="btn-secondary flex items-center justify-center"
+            >
+              <ArrowLeft className="h-5 w-5 mr-2 rotate-180" />
+              Download PDF Report
+            </button>
             <button
               onClick={() => navigate("/interview")}
               className="btn-primary flex items-center justify-center"
@@ -402,7 +548,7 @@ const InterviewSession = () => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
-                Interview with Gwen
+                Interview with Rick
               </h1>
               <p className="text-gray-600">
                 {session.user_name || session.name} •{" "}
@@ -432,7 +578,7 @@ const InterviewSession = () => {
           </div>
         </div>
 
-        {/* Gwen's Message */}
+        {/* Rick's Message */}
         <div className="card mb-6">
           <div className="flex items-start space-x-3">
             <div className="h-10 w-10 bg-primary-600 rounded-full flex items-center justify-center flex-shrink-0">
@@ -440,54 +586,96 @@ const InterviewSession = () => {
             </div>
             <div className="flex-1">
               <div className="bg-primary-50 rounded-lg p-4">
-                <p className="text-primary-900 font-medium mb-2">Gwen says:</p>
+                <p className="text-primary-900 font-medium mb-2">Rick says:</p>
                 <p className="text-primary-800">{currentQuestion.question}</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Answer Input */}
-        <div className="card">
-          <label
-            htmlFor="answer"
-            className="block text-sm font-medium text-gray-700 mb-3"
-          >
-            Your Answer
-          </label>
-          <textarea
-            id="answer"
-            value={currentAnswer}
-            onChange={(e) => setCurrentAnswer(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Type your answer here... (Ctrl+Enter to submit)"
-            className="w-full h-32 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
-            disabled={submitting}
-          />
-
-          <div className="mt-4 flex justify-between items-center">
-            <p className="text-sm text-gray-500">
-              Press Ctrl+Enter to submit your answer
+        {/* Voice-Only Answer Input (if supported) */}
+        {voiceSupported ? (
+          <div className="card">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`h-3 w-3 rounded-full ${
+                    listening ? "bg-green-500" : "bg-gray-300"
+                  }`}
+                  aria-label={listening ? "listening" : "not listening"}
+                />
+                <p className="text-sm text-gray-700">
+                  {listening
+                    ? "Rick is listening..."
+                    : "Rick is paused. Tap resume to continue."}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {listening ? (
+                  <button
+                    onClick={stopListening}
+                    className="btn-secondary flex items-center"
+                  >
+                    <MicOff className="h-4 w-4 mr-2" /> Pause Listening
+                  </button>
+                ) : (
+                  <button
+                    onClick={startListening}
+                    className="btn-primary flex items-center"
+                  >
+                    <Mic className="h-4 w-4 mr-2" /> Resume Listening
+                  </button>
+                )}
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mt-3">
+              No typing needed. Answer out loud and Rick will evaluate
+              automatically.
             </p>
-            <button
-              onClick={handleSubmitAnswer}
-              disabled={submitting || !currentAnswer.trim()}
-              className="btn-primary flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {submitting ? (
-                <>
-                  <Loader className="h-4 w-4 animate-spin mr-2" />
-                  Submitting...
-                </>
-              ) : (
-                <>
-                  <Send className="h-4 w-4 mr-2" />
-                  Submit Answer
-                </>
-              )}
-            </button>
           </div>
-        </div>
+        ) : (
+          // Fallback: text input when voice not supported
+          <div className="card">
+            <label
+              htmlFor="answer"
+              className="block text-sm font-medium text-gray-700 mb-3"
+            >
+              Your Answer
+            </label>
+            <textarea
+              id="answer"
+              value={currentAnswer}
+              onChange={(e) => setCurrentAnswer(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="Type your answer here... (Ctrl+Enter to submit)"
+              className="w-full h-32 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+              disabled={submitting}
+            />
+
+            <div className="mt-4 flex justify-between items-center">
+              <p className="text-sm text-gray-500">
+                Press Ctrl+Enter to submit your answer
+              </p>
+              <button
+                onClick={handleSubmitAnswer}
+                disabled={submitting || !currentAnswer.trim()}
+                className="btn-primary flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? (
+                  <>
+                    <Loader className="h-4 w-4 animate-spin mr-2" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4 mr-2" />
+                    Submit Answer
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Previous Answers */}
         {session.answers &&

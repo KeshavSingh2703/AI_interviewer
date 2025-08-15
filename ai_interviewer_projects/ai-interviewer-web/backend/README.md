@@ -112,7 +112,7 @@ npm start
 
 ### Environment Variables (config.env)
 ```env
-MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/ai_interviewer
+MONGODB_URI=MONGODB_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/ai_interviewer
 JWT_SECRET_KEY=your-secret-key-change-in-production
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
 PORT=8000

@@ -1,236 +1,105 @@
-# AI Interviewer Web Application
+# AI Interviewer Web
 
-A modern web application that brings Gwen, your AI interviewer, to the web! Practice interviews with role-specific questions and receive real-time feedback from our AI interviewer.
+A full‑stack web app that brings Rick, your AI interviewer, to the browser. Practice role‑specific interviews, get instant feedback, and download PDF reports.
 
-## Features
+### Features
 
-- 🤖 **AI-Powered Interviews**: Conduct interviews with Gwen, your AI interviewer
-- 🎯 **Role-Specific Questions**: Questions tailored for different tech roles
-- 💬 **Real-time Feedback**: Get instant feedback on your answers
-- 📊 **Interview History**: Track your progress and review past interviews
-- 📱 **Responsive Design**: Works perfectly on desktop and mobile
-- 🔐 **User Authentication**: Secure login and registration system
-- 📄 **PDF Reports**: Generate detailed interview reports
+- **AI‑powered interviews** with real‑time feedback
+- **Role‑specific question sets** plus general questions
+- **Auth** (register/login) with JWT
+- **Interview history** and **PDF report** download
 
-## Tech Stack
+### Tech Stack
 
-### Backend
+- **Frontend**: React (CRA), React Router, Tailwind CSS, Axios
+- **Backend**: Node.js, Express.js, MongoDB Atlas, JWT, Multer, PDFKit
+- **Optional**: Ollama local LLM for richer evaluations (fallback provided)
 
-- **FastAPI**: Modern Python web framework
-- **Ollama**: Local LLM for AI-powered evaluations
-- **PyPDF2**: Resume parsing
-- **ReportLab**: PDF report generation
-- **JWT**: Authentication
+## Project Structure
 
-### Frontend
-
-- **React**: Modern UI framework
-- **Tailwind CSS**: Utility-first CSS framework
-- **React Router**: Client-side routing
-- **Axios**: HTTP client
-- **Lucide React**: Beautiful icons
-- **React Hot Toast**: Toast notifications
+```
+ai-interviewer-web/
+  backend/      # Express API
+  frontend/     # React app
+  MONGODB_SETUP.md
+```
 
 ## Prerequisites
 
-- Python 3.8+
-- Node.js 16+
-- Ollama (for AI evaluations)
+- Node.js 18+ and npm
+- MongoDB Atlas cluster (or local MongoDB)
+- (Optional) Ollama installed locally
 
-## Installation
+## Setup
 
-### 1. Clone the Repository
-
-```bash
-git clone <your-repo-url>
-cd ai-interviewer-web
-```
-
-### 2. Backend Setup
+### 1) Backend
 
 ```bash
-# Navigate to backend directory
 cd backend
-
-# Create virtual environment
-python -m venv venv
-
-# Activate virtual environment
-# On Windows:
-venv\Scripts\activate
-# On macOS/Linux:
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Install Ollama (if not already installed)
-# Visit: https://ollama.ai/download
-# Then pull the llama2 model:
-ollama pull llama2
-```
-
-### 3. Frontend Setup
-
-```bash
-# Navigate to frontend directory
-cd frontend
-
-# Install dependencies
+cp config.env.example config.env
+# Open config.env and fill in placeholders
 npm install
-
-# Build the application
-npm run build
+npm run dev   # or: npm start
 ```
 
-## Running the Application
+Backend runs at `http://localhost:8000`.
 
-### 1. Start the Backend
+Environment file used by the server is `backend/config.env` (loaded via dotenv). See sample below; do not commit real values.
 
-```bash
-cd backend
-npm start
+```env
+# backend/config.env
+PORT=8000
+MONGODB_URI=mongodb+srv://<username>:<password>@<cluster-host>/<db-name>?retryWrites=true&w=majority
+JWT_SECRET=change-me-in-production
+JWT_EXPIRES_IN=24h
 ```
 
-The backend will start on `http://localhost:8000`
+For help creating a secure connection string without exposing secrets, see `MONGODB_SETUP.md`.
 
-### 2. Start the Frontend
+### 2) Frontend
 
 ```bash
 cd frontend
+npm install
 npm start
 ```
 
-The frontend will start on `http://localhost:3000`
+Frontend runs at `http://localhost:3000` and proxies API requests to `http://localhost:8000` (see `frontend/package.json`). For production builds, update the API base URL in `frontend/src/services/api.js` to your deployed backend URL.
 
 ## Usage
 
-1. **Register/Login**: Create an account or sign in
-2. **Select Role**: Choose from available interview roles
-3. **Start Interview**: Begin your practice interview with Gwen
-4. **Answer Questions**: Provide detailed answers to role-specific questions
-5. **Receive Feedback**: Get real-time feedback from Gwen
-6. **Review Results**: View your interview summary and detailed feedback
-7. **Track Progress**: Monitor your interview history and improvements
+1. Register/Login
+2. Start an interview for a selected role
+3. Answer questions and receive feedback
+4. Complete the interview and download the report
 
-## Available Roles
+## API Overview
 
-- **Cloud Engineer**: AWS, Azure, GCP, DevOps, Infrastructure
-- **Backend Engineer**: APIs, Databases, Server-side development
-- **Frontend Engineer**: React, JavaScript, UI/UX development
-- **UI/UX Designer**: Design systems, User research, Prototyping
-- **Software Development Engineer**: Full-stack development
-- **Data Analyst**: Data analysis, SQL, Visualization
-- **AI Engineer**: Machine Learning, AI, Neural Networks
+- `POST /api/register`
+- `POST /api/login`
+- `GET /api/roles`
+- `POST /api/interview/start`
+- `POST /api/interview/submit-answer/:session_id`
+- `POST /api/interview/complete/:session_id`
+- `GET /api/interview/session/:session_id`
+- `GET /api/user/interviews`
+- `GET /api/interview/report/:session_id` (PDF)
 
-## API Endpoints
+## Security & Secrets
 
-### Authentication
+- Do not commit `backend/config.env` or any secrets.
+- Use placeholders in docs and code comments. Keep real MongoDB credentials in local env only.
+- Rotate `JWT_SECRET` for production and restrict Atlas network access.
 
-- `POST /api/register` - Register new user
-- `POST /api/login` - User login
+## Deployment Notes
 
-### Interviews
+- Backend: deploy Node/Express (Render, Railway, Heroku alternative, etc.). Set env vars from your provider’s dashboard.
+- Frontend: build (`npm run build`) and deploy (Vercel/Netlify). Point the app to your API by updating `frontend/src/services/api.js`.
 
-- `GET /api/roles` - Get available roles
-- `POST /api/interview/start` - Start new interview
-- `POST /api/interview/submit-answer` - Submit answer
-- `POST /api/interview/complete` - Complete interview
-- `GET /api/interview/session/{session_id}` - Get session details
-- `GET /api/user/interviews` - Get user's interview history
+## References
 
-## Deployment
-
-### Backend Deployment (Heroku)
-
-1. Create a `Procfile` in the backend directory:
-
-```
-web: node server.js
-```
-
-2. Deploy to Heroku:
-
-```bash
-heroku create your-app-name
-git add .
-git commit -m "Deploy backend"
-git push heroku main
-```
-
-### Frontend Deployment (Vercel/Netlify)
-
-1. Build the application:
-
-```bash
-cd frontend
-npm run build
-```
-
-2. Deploy to Vercel:
-
-```bash
-vercel --prod
-```
-
-Or deploy to Netlify by dragging the `build` folder to Netlify's dashboard.
-
-### Environment Variables
-
-Create a `.env` file in the frontend directory:
-
-```
-REACT_APP_API_URL=https://your-backend-url.herokuapp.com
-```
-
-## Configuration
-
-### Backend Configuration
-
-Update `backend/server.js` to configure:
-
-- CORS origins for your frontend domain
-- Database connection (MongoDB)
-- JWT secret key
-
-### Frontend Configuration
-
-Update `frontend/src/services/api.js` to configure:
-
-- API base URL
-- Authentication headers
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Ollama not found**: Make sure Ollama is installed and running
-2. **CORS errors**: Update CORS origins in backend/server.js
-3. **Authentication errors**: Check JWT configuration
-4. **Frontend build errors**: Clear node_modules and reinstall
-
-### Getting Help
-
-- Check the console for error messages
-- Ensure all dependencies are installed
-- Verify Ollama is running with `ollama list`
-- Check network connectivity between frontend and backend
+- MongoDB setup guide: `MONGODB_SETUP.md`
 
 ## License
 
-This project is licensed under the MIT License.
-
-## Acknowledgments
-
-- Built with FastAPI and React
-- Powered by Ollama for AI evaluations
-- Styled with Tailwind CSS
-- Icons from Lucide React
+MIT

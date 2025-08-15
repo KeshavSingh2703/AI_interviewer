@@ -6,6 +6,7 @@ const morgan = require("morgan");
 const { MongoClient, ObjectId } = require("mongodb");
 const { v4: uuidv4 } = require("uuid");
 const multer = require("multer");
+const PDFDocument = require("pdfkit");
 let pdfParse = null;
 try {
   // Optional dependency; enable resume PDF parsing when installed
@@ -120,6 +121,200 @@ const GENERAL_QUESTIONS = [
   "What's your experience working in teams?",
   "How do you handle stress and pressure?",
 ];
+
+// Role-specific rubrics (criteria with weights). Weights should sum to 1.0
+const ROLE_RUBRICS = {
+  cloud_engineer: [
+    {
+      name: "Architecture & Scalability",
+      weight: 0.35,
+      description:
+        "Designs highly available, scalable cloud systems; tradeoffs and patterns",
+    },
+    {
+      name: "Security & Reliability",
+      weight: 0.25,
+      description: "IAM, network policies, backups, monitoring, resiliency",
+    },
+    {
+      name: "DevOps & Automation",
+      weight: 0.2,
+      description: "CI/CD, IaC, container orchestration, cost optimization",
+    },
+    {
+      name: "Communication & Clarity",
+      weight: 0.2,
+      description: "Clear, structured explanation with relevant examples",
+    },
+  ],
+  backend_engineer: [
+    {
+      name: "System Design",
+      weight: 0.35,
+      description:
+        "APIs, data modeling, performance, scalability, consistency tradeoffs",
+    },
+    {
+      name: "Implementation Depth",
+      weight: 0.25,
+      description: "Algorithms, code structure, testing, debugging",
+    },
+    {
+      name: "Databases & Storage",
+      weight: 0.2,
+      description: "SQL/NoSQL choices, indexing, transactions, caching",
+    },
+    {
+      name: "Communication & Clarity",
+      weight: 0.2,
+      description: "Clarity, structure, concrete examples",
+    },
+  ],
+  frontend_engineer: [
+    {
+      name: "UI Architecture & State",
+      weight: 0.3,
+      description: "Component design, state management, routing",
+    },
+    {
+      name: "Performance & Accessibility",
+      weight: 0.25,
+      description: "Perf optimizations, a11y, responsiveness",
+    },
+    {
+      name: "Web Fundamentals",
+      weight: 0.25,
+      description: "HTML/CSS/JS/TS best practices",
+    },
+    {
+      name: "Communication & Clarity",
+      weight: 0.2,
+      description: "Structure, examples, tradeoffs",
+    },
+  ],
+  ui_ux_designer: [
+    {
+      name: "Process & Research",
+      weight: 0.35,
+      description: "User research, usability testing, insights",
+    },
+    {
+      name: "Interaction & Systems",
+      weight: 0.3,
+      description: "Interaction design, design systems, consistency",
+    },
+    {
+      name: "Communication & Clarity",
+      weight: 0.2,
+      description: "Narrative, rationale, constraints",
+    },
+    {
+      name: "Accessibility",
+      weight: 0.15,
+      description: "Inclusive design considerations",
+    },
+  ],
+  sde: [
+    {
+      name: "Problem Solving",
+      weight: 0.35,
+      description: "DSA, complexity, correctness",
+    },
+    {
+      name: "System Design",
+      weight: 0.25,
+      description: "Architecture, scalability, reliability",
+    },
+    {
+      name: "Code Quality & Testing",
+      weight: 0.2,
+      description: "Clean code, tests, debugging",
+    },
+    {
+      name: "Communication & Clarity",
+      weight: 0.2,
+      description: "Structure, examples, tradeoffs",
+    },
+  ],
+  data_analyst: [
+    {
+      name: "Data Handling & SQL",
+      weight: 0.35,
+      description: "Cleaning, joins, aggregations, correctness",
+    },
+    {
+      name: "Analysis & Insight",
+      weight: 0.3,
+      description: "Reasoning from data, business impact",
+    },
+    {
+      name: "Visualization & Communication",
+      weight: 0.2,
+      description: "Charts, storytelling, clarity",
+    },
+    {
+      name: "Tooling",
+      weight: 0.15,
+      description: "Pandas/Excel/BI tools proficiency",
+    },
+  ],
+  ai_engineer: [
+    {
+      name: "ML Fundamentals",
+      weight: 0.3,
+      description: "Bias/variance, metrics, validation",
+    },
+    {
+      name: "Modeling & MLOps",
+      weight: 0.3,
+      description: "Feature engineering, deployment, monitoring",
+    },
+    {
+      name: "Problem Framing",
+      weight: 0.2,
+      description: "Objective, constraints, data suitability",
+    },
+    {
+      name: "Communication & Clarity",
+      weight: 0.2,
+      description: "Structure, examples, tradeoffs",
+    },
+  ],
+};
+
+// Few-shot examples to anchor scoring per role (kept concise)
+const ROLE_FEWSHOTS = {
+  backend_engineer: [
+    {
+      label: "Good",
+      question: "How would you design a rate limiter for an API?",
+      answer:
+        "I'd use a token bucket per client with Redis for atomic counters and TTL. For burst handling, refill tokens each interval and enforce a max. I'd expose headers for remaining quota and backoff.",
+      rationale: "Concrete mechanism, storage choice, headers, backoff",
+    },
+    {
+      label: "Poor",
+      question: "How would you design a rate limiter for an API?",
+      answer: "I'd limit requests somehow. Maybe use a database.",
+      rationale: "Vague, lacks mechanism and tradeoffs",
+    },
+  ],
+  cloud_engineer: [
+    {
+      label: "Good",
+      question: "Design a highly available web app on AWS.",
+      answer:
+        "ALB -> ASG across AZs, RDS Multi-AZ, S3 for assets, CloudFront, IaC via Terraform, CloudWatch alarms, WAF, backups.",
+      rationale: "HA patterns, services, IaC, ops",
+    },
+    {
+      label: "Poor",
+      question: "Design a highly available web app on AWS.",
+      answer: "I'd use EC2. Maybe a database.",
+      rationale: "No HA detail, no services, no ops",
+    },
+  ],
+};
 
 // Lightweight resume skill keywords to personalize questions (mirrors voice agent)
 const RESUME_SKILLS_KEYWORDS = {
@@ -273,7 +468,7 @@ const suggestRoleFromSkills = (skillsByRole) => {
   let bestRole = "sde";
   let bestScore = -1;
   for (const [role, skills] of Object.entries(skillsByRole || {})) {
-    const score = (skills?.length || 0);
+    const score = skills?.length || 0;
     if (score > bestScore) {
       bestScore = score;
       bestRole = role;
@@ -451,84 +646,123 @@ const evaluateAnswer = async (question, answer, role) => {
       };
     }
 
-    // Check if Ollama is available
+    // If Ollama not available, mock rubric-based response
     if (!ollama) {
-      // Fallback evaluation without Ollama
-      const score = Math.floor(Math.random() * 40) + 60; // Score between 60-100
-      const feedback = `Great answer for the ${role} position! You scored ${score}/100. Your response shows good understanding of the topic. Consider adding more specific examples from your experience to make it even stronger.`;
-      const suggestions = [
-        "Provide more specific examples from your experience",
-        "Use technical terminology relevant to the role",
-        "Structure your response with clear points",
-        "Connect your answer to real-world scenarios",
-      ];
-
-      return { score, feedback, suggestions };
+      const rubric = ROLE_RUBRICS[role?.toLowerCase?.()] || ROLE_RUBRICS["sde"];
+      const lengthScore = Math.max(0, Math.min(100, (answer || "").length / 4));
+      let weighted = 0;
+      const criteria = {};
+      for (const c of rubric) {
+        const s = Math.round(lengthScore * (0.9 + Math.random() * 0.2));
+        weighted += s * c.weight;
+        criteria[c.name] = {
+          score: s,
+          weight: c.weight,
+          reason: "Heuristic fallback without model",
+        };
+      }
+      const score = Math.round(weighted);
+      return {
+        score,
+        weighted_score: score,
+        total_weight: 1,
+        feedback:
+          "Good answer. Consider adding specific examples, tradeoffs, and measurable impact to strengthen it.",
+        suggestions: [
+          "Add one concrete example",
+          "Explain tradeoffs/decisions",
+          "Quantify outcome or impact",
+        ],
+        criteria,
+      };
     }
 
-    // Create a prompt for evaluation with Gwen's personality (from voice agent)
+    // Create a prompt for evaluation with Rick's personality and a role-specific rubric + few-shots
+    const rubric = ROLE_RUBRICS[role?.toLowerCase?.()] || ROLE_RUBRICS["sde"];
+    const examples = ROLE_FEWSHOTS[role?.toLowerCase?.()] || [];
+    const rubricText = rubric
+      .map(
+        (c, idx) =>
+          `${idx + 1}. ${c.name} (weight ${c.weight}): ${c.description}`
+      )
+      .join("\n");
+    const examplesText = examples
+      .map(
+        (ex, idx) =>
+          `Example ${idx + 1} - ${ex.label}\nQ: ${ex.question}\nA: ${
+            ex.answer
+          }\nWhy: ${ex.rationale}`
+      )
+      .join("\n\n");
+
     const prompt = `
-    You are Gwen, a professional and friendly AI interviewer conducting a real interview. You're providing natural, conversational feedback to a candidate's response.
-    
-    Question: ${question}
-    Answer: ${answer}
-    Role: ${role}
-    
-    Please provide natural, conversational feedback on this answer as if you're in a real interview. Consider:
-    1. Relevance to the question
-    2. Clarity and communication
-    3. Specificity and examples
-    4. Professionalism
-    5. Areas for improvement
-    
-    Provide feedback in 2-3 sentences that sounds natural and conversational. Use a warm, professional tone as if you're a real interviewer giving immediate feedback. Don't use phrases like "Thank you for your answer" or "I noticed you provided" - just give natural feedback.
-    
-    Also provide a score from 1-100 and 3 specific suggestions for improvement.
-    
-    Format your response as JSON:
-    {
-      "score": <score>,
-      "feedback": "<feedback_text>",
-      "suggestions": ["<suggestion1>", "<suggestion2>", "<suggestion3>"]
-    }
-    `;
+You are Rick, a professional and friendly AI interviewer.
 
-    // Use Ollama to generate feedback (same as voice agent)
+Evaluate the candidate's answer using the role-specific rubric below. Score each criterion 0-100 with a brief reason, then compute a weighted_score (0-100) using the given weights (weights sum to 1.0). Return concise feedback and 3 suggestions.
+
+Rubric:\n${rubricText}
+
+Few-shot anchors (for reference quality; do not copy):
+${examplesText || "(none)"}
+
+Question: ${question}
+Answer: ${answer}
+Role: ${role}
+
+Return JSON only:
+{
+  "criteria": {
+    "<criterion_name>": { "score": <0-100>, "weight": <0-1>, "reason": "<short>" }
+  },
+  "weighted_score": <0-100>,
+  "score": <0-100>,
+  "feedback": "<2 short sentences>",
+  "suggestions": ["<short>", "<short>", "<short>"]
+}
+`;
+
+    // Use Ollama to generate structured evaluation
     const response = await ollama.chat({
       model: "llama3.1:8b" || "llama2",
       messages: [{ role: "user", content: prompt }],
     });
 
-    // Extract the feedback from the response
+    // Extract and parse
     const responseText = response.message.content.trim();
-
     try {
-      // Try to parse JSON response
       const parsedResponse = JSON.parse(responseText);
       return {
-        score: parsedResponse.score || 75,
+        score: parsedResponse.score ?? parsedResponse.weighted_score ?? 75,
+        weighted_score:
+          parsedResponse.weighted_score ?? parsedResponse.score ?? 75,
+        total_weight: rubric.reduce((s, c) => s + (c.weight || 0), 0) || 1,
         feedback:
           parsedResponse.feedback ||
-          "Good answer! Consider adding more specific examples to demonstrate your expertise.",
+          "Good answer. Consider adding specific examples and tradeoffs.",
         suggestions: parsedResponse.suggestions || [
           "Provide more specific examples",
-          "Use technical terminology",
-          "Structure your response better",
+          "Explain tradeoffs",
+          "Quantify impact",
         ],
+        criteria: parsedResponse.criteria || {},
       };
     } catch (parseError) {
-      // If JSON parsing fails, extract score and create structured response
-      const score = Math.floor(Math.random() * 100) + 1;
+      const score = Math.floor(Math.random() * 40) + 60;
+      const criteria = {};
+      for (const c of rubric) {
+        criteria[c.name] = {
+          score,
+          weight: c.weight,
+          reason: "Model parse fallback",
+        };
+      }
       return {
         score,
-        feedback:
-          responseText ||
-          `Great answer for the ${role} position! You scored ${score}/100. Your response shows good understanding of the topic.`,
-        suggestions: [
-          "Provide more specific examples",
-          "Use technical terminology",
-          "Structure your response better",
-        ],
+        weighted_score: score,
+        total_weight: 1,
+        feedback: `Solid response. You scored ${score}/100. Add concrete examples and quantify results.`,
+        suggestions: ["Add examples", "Explain tradeoffs", "Quantify impact"],
+        criteria,
       };
     }
   } catch (error) {
@@ -551,10 +785,27 @@ const evaluateAnswer = async (question, answer, role) => {
 const evaluateInterview = async (answers, role) => {
   try {
     const totalScore = answers.reduce(
-      (sum, answer) => sum + (answer.feedback.score || 0),
+      (sum, a) => sum + (a.feedback?.weighted_score ?? a.feedback?.score ?? 0),
       0
     );
-    const averageScore = Math.round(totalScore / answers.length);
+    const averageScore = Math.round(totalScore / Math.max(answers.length, 1));
+
+    // Aggregate criteria averages if available
+    const criteriaTotals = {};
+    const criteriaWeights = {};
+    for (const a of answers) {
+      const crit = a.feedback?.criteria || {};
+      for (const [k, v] of Object.entries(crit)) {
+        criteriaTotals[k] = (criteriaTotals[k] || 0) + (v?.score || 0);
+        criteriaWeights[k] = v?.weight ?? criteriaWeights[k] ?? null;
+      }
+    }
+    const criteriaAverages = Object.fromEntries(
+      Object.entries(criteriaTotals).map(([k, total]) => [
+        k,
+        Math.round(total / Math.max(answers.length, 1)),
+      ])
+    );
 
     // Check if Ollama is available
     if (!ollama) {
@@ -563,19 +814,20 @@ const evaluateInterview = async (answers, role) => {
         overall_score: averageScore,
         total_questions: answers.length,
         completed_questions: answers.length,
-        feedback: `You completed the ${role} interview with an average score of ${averageScore}/100. Your responses demonstrate good understanding of the role requirements. Keep practicing to improve your skills further.`,
+        feedback: `You completed the ${role} interview with an average score of ${averageScore}/100. Your responses demonstrate good understanding of the role requirements. Keep practicing to deepen specifics and quantify impact.`,
         recommendations: [
           "Practice more technical questions specific to your role",
           "Work on your communication skills and clarity",
           "Research industry best practices and trends",
           "Prepare specific examples from your experience",
         ],
+        criteria_averages: criteriaAverages,
       };
     }
 
-    // Generate overall feedback with Gwen's personality using Ollama
+    // Generate overall feedback with Rick's personality using Ollama
     const overallPrompt = `
-    You are Gwen, a professional and friendly AI interviewer providing overall feedback for an interview session.
+    You are Rick, a professional and friendly AI interviewer providing overall feedback for an interview session.
     
     Interview Summary:
     - Total questions answered: ${answers.length}
@@ -584,6 +836,7 @@ const evaluateInterview = async (answers, role) => {
         answers.length
     )} characters
     - Role: ${role}
+    - Average score: ${averageScore}/100
     
     Individual responses:
     ${answers
@@ -639,6 +892,7 @@ const evaluateInterview = async (answers, role) => {
             "Research industry best practices",
             "Prepare specific examples from your experience",
           ],
+          criteria_averages: criteriaAverages,
         };
       } catch (parseError) {
         return {
@@ -654,6 +908,7 @@ const evaluateInterview = async (answers, role) => {
             "Research industry best practices",
             "Prepare specific examples from your experience",
           ],
+          criteria_averages: criteriaAverages,
         };
       }
     } catch (ollamaError) {
@@ -689,6 +944,49 @@ const evaluateInterview = async (answers, role) => {
   }
 };
 
+// Generate a short follow-up question based on the user's answer
+const generateFollowUpQuestion = async (question, answer, role) => {
+  try {
+    if (!answer || typeof answer !== "string" || answer.trim().length === 0) {
+      return "";
+    }
+
+    // If Ollama not available, return an empty follow-up (frontend may fallback)
+    if (!ollama) return "";
+
+    const prompt = `
+You are Rick, a professional and friendly AI interviewer.
+
+Role: ${role}
+Original question: ${question}
+Candidate's answer: ${answer}
+
+Write ONE brief, natural follow-up question that digs deeper into the candidate's experience, tools used, impact, or decision-making. Keep it under 18 words. If the candidate clearly said they don't know, return an empty string.
+
+Respond as JSON only:
+{ "follow_up": "<one_short_question_or_empty>" }
+`;
+
+    const response = await ollama.chat({
+      model: "llama3.1:8b" || "llama2",
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const text = response.message.content.trim();
+    try {
+      const parsed = JSON.parse(text);
+      return typeof parsed.follow_up === "string"
+        ? parsed.follow_up.trim()
+        : "";
+    } catch (_) {
+      return "";
+    }
+  } catch (error) {
+    console.error("Follow-up generation error:", error);
+    return "";
+  }
+};
+
 // API Routes
 
 // Health check
@@ -700,6 +998,21 @@ app.get("/", (req, res) => {
 app.get("/api/roles", (req, res) => {
   const roles = getAvailableRoles();
   res.json({ roles });
+});
+// Generate a context-aware follow-up question
+app.post("/api/interview/follow-up", authenticateToken, async (req, res) => {
+  try {
+    const { question, answer, role } = req.body || {};
+    const follow = await generateFollowUpQuestion(
+      question || "",
+      answer || "",
+      role || ""
+    );
+    return res.json({ follow_up: follow || "" });
+  } catch (error) {
+    console.error("Follow-up endpoint error:", error);
+    return res.status(500).json({ follow_up: "" });
+  }
 });
 
 // Upload resume (PDF) and extract text/skills
@@ -715,9 +1028,12 @@ app.post(
 
       // Only PDF supported in this minimal implementation
       const isPdf =
-        req.file.mimetype === "application/pdf" || req.file.originalname.endsWith(".pdf");
+        req.file.mimetype === "application/pdf" ||
+        req.file.originalname.endsWith(".pdf");
       if (!isPdf) {
-        return res.status(415).json({ detail: "Only PDF resumes are supported" });
+        return res
+          .status(415)
+          .json({ detail: "Only PDF resumes are supported" });
       }
 
       if (!pdfParse) {
@@ -894,6 +1210,122 @@ app.post("/api/interview/start", authenticateToken, async (req, res) => {
     res.status(500).json({ detail: "Failed to start interview" });
   }
 });
+
+// Generate and download interview report as PDF
+app.get(
+  "/api/interview/report/:session_id",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const { session_id } = req.params;
+
+      const session = await db.collection("sessions").findOne({ session_id });
+      if (!session) {
+        return res.status(404).json({ detail: "Session not found" });
+      }
+      if (session.user_id !== req.user.username) {
+        return res.status(403).json({ detail: "Access denied" });
+      }
+
+      const filename = `interview_report_${session.session_id}.pdf`;
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=\"${filename}\"`
+      );
+
+      const doc = new PDFDocument({ margin: 50 });
+      doc.pipe(res);
+
+      // Header
+      doc
+        .fontSize(20)
+        .text("Interview Report - Conducted by Rick", { align: "center" })
+        .moveDown(0.5);
+      doc
+        .fontSize(12)
+        .text(`Candidate: ${session.name || session.user_name || "N/A"}`, {
+          align: "center",
+        })
+        .text(
+          `Role: ${(session.role || "")
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, (l) => l.toUpperCase())}`,
+          { align: "center" }
+        )
+        .text(
+          `Date: ${new Date(
+            session.end_time || session.start_time
+          ).toLocaleString()}`,
+          {
+            align: "center",
+          }
+        )
+        .moveDown(1.2);
+
+      // Overall evaluation
+      const overall = session.overall_evaluation || {};
+      const overallFeedback = overall.overall_feedback || overall.feedback;
+      if (overallFeedback) {
+        doc
+          .fontSize(14)
+          .text("Overall Evaluation", { underline: true })
+          .moveDown(0.3);
+        if (typeof overallFeedback === "string") {
+          doc.fontSize(12).text(overallFeedback).moveDown(0.6);
+        }
+        if (overall.recommendations && Array.isArray(overall.recommendations)) {
+          doc.fontSize(12).text("Recommendations:");
+          overall.recommendations.forEach((rec) => {
+            doc.text(`• ${rec}`);
+          });
+          doc.moveDown(0.8);
+        }
+      }
+
+      // Questions and answers
+      doc
+        .fontSize(14)
+        .text("Interview Questions and Answers", { underline: true })
+        .moveDown(0.5);
+      const answers = Array.isArray(session.answers) ? session.answers : [];
+      answers.forEach((qa, idx) => {
+        doc
+          .fontSize(12)
+          .text(`Question ${idx + 1}: ${qa.question || "N/A"}`)
+          .moveDown(0.2);
+        if (qa.answer) {
+          doc.fontSize(11).text(`Answer: ${qa.answer}`).moveDown(0.2);
+        }
+        const fb = qa.feedback;
+        const feedbackText =
+          typeof fb === "object" ? fb.feedback || JSON.stringify(fb) : fb;
+        if (feedbackText) {
+          doc
+            .fontSize(11)
+            .text(`Rick's Feedback: ${feedbackText}`)
+            .moveDown(0.6);
+        } else {
+          doc.moveDown(0.4);
+        }
+      });
+
+      // Footer
+      doc
+        .moveDown(1)
+        .fontSize(10)
+        .fillColor("gray")
+        .text("Generated by Rick - Your AI Interview Assistant", {
+          align: "center",
+        });
+
+      doc.end();
+    } catch (error) {
+      console.error("PDF report error:", error);
+      res.status(500).json({ detail: "Failed to generate report" });
+    }
+  }
+);
 
 // Submit Answer (now with AI evaluation)
 app.post(

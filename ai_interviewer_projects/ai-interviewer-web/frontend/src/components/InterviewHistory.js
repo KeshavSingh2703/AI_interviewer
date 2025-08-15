@@ -142,7 +142,7 @@ const InterviewHistory = () => {
             <History className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No interviews yet</h3>
             <p className="text-gray-600 mb-4">
-              Start your first interview to begin practicing with Gwen
+              Start your first interview to begin practicing with Rick
             </p>
             <Link to="/interview" className="btn-primary">
               Start Your First Interview

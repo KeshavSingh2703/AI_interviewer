@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Startup script for AI Interviewer Web Application
- * This script helps you start both the backend and frontend servers
+ * This script helps you start the backend and frontend servers,
+ * and can optionally start the Python voice agent.
  */
 
 const { spawn } = require("child_process");
@@ -84,63 +85,118 @@ function setupFrontend() {
   return true;
 }
 
-function startServers() {
+function startServers({ withVoice = false, voiceOnly = false } = {}) {
   console.log("\n🚀 Starting servers...");
 
   const backendDir = path.join(__dirname, "backend");
   const frontendDir = path.join(__dirname, "frontend");
+  const voiceDir = path.join(__dirname, "..", "ai-interviewer-voice");
 
-  // Start backend server
-  console.log("🔧 Starting Express.js backend server on http://localhost:8000");
-  const backendProcess = spawn("npm", ["start"], {
-    cwd: backendDir,
-    stdio: "inherit",
-    shell: true,
-  });
+  let backendProcess = null;
+  let frontendProcess = null;
+  let voiceProcess = null;
 
-  // Wait a moment for backend to start
-  setTimeout(() => {
-    // Start frontend server
-    console.log("🎨 Starting frontend server on http://localhost:3000");
-    const frontendProcess = spawn("npm", ["start"], {
-      cwd: frontendDir,
+  const startVoice = () => {
+    try {
+      if (!fs.existsSync(voiceDir)) {
+        console.log(
+          "⚠️  Voice agent directory not found. Skipping voice start."
+        );
+        return;
+      }
+      console.log("🗣️  Starting Python voice agent (Rick)");
+      // Prefer python, fallback to python3 on some systems
+      voiceProcess = spawn(
+        process.platform === "win32" ? "python" : "python3",
+        ["main.py"],
+        {
+          cwd: voiceDir,
+          stdio: "inherit",
+          shell: true,
+        }
+      );
+      voiceProcess.on("close", (code) => {
+        console.log(`Voice agent exited with code ${code}`);
+      });
+    } catch (e) {
+      console.log("⚠️  Failed to start voice agent:", e.message);
+    }
+  };
+
+  if (!voiceOnly) {
+    // Start backend server
+    console.log(
+      "🔧 Starting Express.js backend server on http://localhost:8000"
+    );
+    backendProcess = spawn("npm", ["start"], {
+      cwd: backendDir,
       stdio: "inherit",
       shell: true,
     });
+  }
+
+  // Wait a moment for backend to start
+  setTimeout(() => {
+    if (!voiceOnly) {
+      // Start frontend server
+      console.log("🎨 Starting frontend server on http://localhost:3000");
+      frontendProcess = spawn("npm", ["start"], {
+        cwd: frontendDir,
+        stdio: "inherit",
+        shell: true,
+      });
+    }
 
     // Wait a moment for frontend to start
     setTimeout(() => {
-      console.log("\n✅ AI Interviewer Web Application is running!");
-      console.log("📱 Frontend: http://localhost:3000");
-      console.log("🔧 Backend: http://localhost:8000");
-      console.log("\nPress Ctrl+C to stop the servers");
+      if (!voiceOnly) {
+        console.log("\n✅ AI Interviewer Web Application is running!");
+        console.log("📱 Frontend: http://localhost:3000");
+        console.log("🔧 Backend: http://localhost:8000");
+        if (withVoice) console.log("🗣️  Voice Agent: running in terminal");
+        console.log("\nPress Ctrl+C to stop the servers");
+      }
+      if (withVoice) startVoice();
     }, 5000);
 
     // Handle process termination
     process.on("SIGINT", () => {
       console.log("\n🛑 Stopping servers...");
-      backendProcess.kill();
-      frontendProcess.kill();
+      try {
+        backendProcess && backendProcess.kill();
+      } catch (_) {}
+      try {
+        frontendProcess && frontendProcess.kill();
+      } catch (_) {}
+      try {
+        voiceProcess && voiceProcess.kill();
+      } catch (_) {}
       console.log("✅ Servers stopped");
       process.exit(0);
     });
 
-    frontendProcess.on("close", (code) => {
-      console.log(`Frontend process exited with code ${code}`);
-    });
+    if (frontendProcess) {
+      frontendProcess.on("close", (code) => {
+        console.log(`Frontend process exited with code ${code}`);
+      });
+    }
   }, 3000);
 
   // Handle process termination
   process.on("SIGINT", () => {
     console.log("\n🛑 Stopping servers...");
-    backendProcess.kill();
+    try {
+      backendProcess && backendProcess.kill();
+    } catch (_) {}
     console.log("✅ Servers stopped");
     process.exit(0);
   });
 
-  backendProcess.on("close", (code) => {
-    console.log(`Backend process exited with code ${code}`);
-  });
+  if (backendProcess) {
+    backendProcess.on("close", (code) => {
+      console.log(`Backend process exited with code ${code}`);
+    });
+  }
 }
 
 function main() {
@@ -166,8 +222,10 @@ function main() {
     process.exit(1);
   }
 
+  const withVoice = process.argv.includes("--voice");
+  const voiceOnly = process.argv.includes("--voice-only");
   // Start servers
-  startServers();
+  startServers({ withVoice, voiceOnly });
 }
 
 if (require.main === module) {

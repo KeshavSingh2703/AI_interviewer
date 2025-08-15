@@ -132,14 +132,14 @@ const Interview = () => {
     setStarting(true);
 
     try {
-      // Speak a brief greeting if supported
+      // Speak immediate greeting on click and mark as pre-greeted for the session view
       if (voiceSupported) {
         speak(
-          `Hi ${resolvedName}. I'll conduct your ${formData.role.replace(
-            /_/g,
-            " "
-          )} interview. Let's begin.`
+          `Hello ${resolvedName}. Hope you're doing good. Let's start your interview.`,
         );
+        try {
+          sessionStorage.setItem("rick_pre_greeted", "1");
+        } catch (_) {}
       }
 
       const response = await interviewAPI.startInterview({
@@ -147,7 +147,7 @@ const Interview = () => {
         name: resolvedName,
         resume_text: resumeOptIn && resumeText ? resumeText : undefined,
       });
-      toast.success("Interview started! Gwen is ready to meet you.");
+      toast.success("Interview started! Rick is ready to meet you.");
       navigate(`/interview/${response.data.session_id}`);
     } catch (error) {
       console.error("Error starting interview:", error);
@@ -275,7 +275,7 @@ const Interview = () => {
             Start Your Interview
           </h1>
           <p className="text-gray-600">
-            Choose your role and begin practicing with Gwen, your AI interviewer
+            Choose your role and begin practicing with Rick, your AI interviewer
           </p>
         </div>
 
@@ -458,7 +458,7 @@ const Interview = () => {
                 ) : (
                   <>
                     <Play className="h-5 w-5 mr-2" />
-                    Start Interview with Gwen
+                    Start Interview with Rick
                     <ArrowRight className="h-5 w-5 ml-2" />
                   </>
                 )}
@@ -476,7 +476,7 @@ const Interview = () => {
             <li>• Take your time to think before answering</li>
             <li>• Provide specific examples from your experience</li>
             <li>• Be honest about your strengths and areas for improvement</li>
-            <li>• Gwen will provide real-time feedback to help you improve</li>
+            <li>• Rick will provide real-time feedback to help you improve</li>
           </ul>
         </div>
       </div>

@@ -609,7 +609,7 @@ const authenticateToken = async (req, res, next) => {
     next();
   } catch (error) {
     console.error("Token verification error:", error);
-    return res.status(403).json({ detail: "Invalid token" });
+    return res.status(401).json({ detail: "Invalid token" });
   }
 };
 
